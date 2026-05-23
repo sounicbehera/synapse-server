@@ -125,5 +125,60 @@ const sendOTP = async (req, res) => {
     }
 };
 
+// --- CRYPTOGRAPHIC OTP VERIFICATION AND SIGNUP GATEWAY ---
+const verifyOTP = async (req, res) => {
+    try {
+        const { name, email, password, pic, otp } = req.body;
+
+        if (!email || !otp) {
+            return res.status(400).json({ message: "Email and OTP token are required." });
+        }
+
+        // Find the latest OTP document for the email
+        const latestOtp = await OTP.findOne({ email }).sort({ createdAt: -1 });
+
+        if (!latestOtp || latestOtp.otp !== otp) {
+            return res.status(400).json({ message: "Invalid or expired synchronization token matrix." });
+        }
+
+        // If signup fields are provided, perform full registration
+        if (name && password) {
+            const userExists = await User.findOne({ email });
+            if (userExists) {
+                return res.status(400).json({ message: "User already exists." });
+            }
+
+            const user = await User.create({
+                name,
+                email,
+                password,
+                pic: pic || "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg",
+            });
+
+            if (user) {
+                // Purge verified OTPs
+                await OTP.deleteMany({ email });
+
+                return res.status(201).json({
+                    _id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    pic: user.pic,
+                    token: generateToken(user._id),
+                });
+            } else {
+                return res.status(400).json({ message: "Failed to create user node." });
+            }
+        } else {
+            // OTP verification only (e.g. for login verification check)
+            await OTP.deleteMany({ email });
+            return res.status(200).json({ success: true, message: "OTP verified successfully." });
+        }
+    } catch (error) {
+        console.error("⚠️ verifyOTP Controller Error:", error.message);
+        res.status(500).json({ message: "Failed to verify synchronization token." });
+    }
+};
+
 // Make sure to add allUsers to your exports at the very bottom!
-module.exports = { registerUser, authUser, allUsers, sendOTP };
+module.exports = { registerUser, authUser, allUsers, sendOTP, verifyOTP };
