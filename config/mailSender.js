@@ -1,30 +1,33 @@
-const SibApiV3Sdk = require("@getbrevo/brevo");
+const { BrevoClient } = require("@getbrevo/brevo");
 
-// Initialize the Brevo transactional email engine API node client
-const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+// 1. Instantiate the Brevo client safely with the API key
+const apiKey = process.env.BREVO_API_KEY;
+if (!apiKey) {
+  console.log("⚠️ Warning: BREVO_API_KEY parameter missing from environment variables.");
+}
 
-// Authenticate via your secure environment variable token string
-const apiKey = SibApiV3Sdk.ApiClient.instance.authentications['api-key'];
-apiKey.apiKey = process.env.BREVO_API_KEY;
+const client = new BrevoClient({
+  apiKey: apiKey || "dummy_key"
+});
 
 const mailSender = async (email, title, body) => {
-    try {
-        const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+  try {
+    // 2. Construct and transmit the transactional email packet
+    const data = await client.transactionalEmails.sendTransacEmail({
+      subject: title,
+      htmlContent: body,
+      sender: { 
+        name: "Synapse Chat Gateway", 
+        email: process.env.BREVO_SENDER_EMAIL || "verification@synapsechat.com" 
+      },
+      to: [{ email: email }]
+    });
 
-        sendSmtpEmail.subject = title;
-        sendSmtpEmail.htmlContent = body;
-        sendSmtpEmail.sender = {
-            name: "Synapse Chat Gateway",
-            email: process.env.BREVO_SENDER_EMAIL
-        };
-        sendSmtpEmail.to = [{ email: email }];
-
-        const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
-        console.log(`📡 Production OTP packet routed via Brevo Cloud. Message ID: ${data.messageId}`);
-        return data;
-    } catch (error) {
-        console.error("⚠️ Brevo Cloud Delivery Failure:", error.message);
-    }
+    console.log(`📡 Production OTP packet routed via Brevo Cloud. ID: ${data.body?.messageId || "Success"}`);
+    return data;
+  } catch (error) {
+    console.error("⚠️ Brevo Cloud Delivery Failure:", error.message);
+  }
 };
 
 module.exports = mailSender;
